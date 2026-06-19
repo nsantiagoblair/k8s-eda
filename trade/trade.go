@@ -28,6 +28,18 @@ func (s Side) String() string {
 	}
 }
 
+// ParseSide converts a string ("BUY" or "SELL") to a Side value.
+func ParseSide(s string) (Side, error) {
+	switch s {
+	case "BUY":
+		return Buy, nil
+	case "SELL":
+		return Sell, nil
+	default:
+		return 0, fmt.Errorf("unknown side %q, must be BUY or SELL", s)
+	}
+}
+
 func (s Side) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.String())
 }
@@ -37,14 +49,11 @@ func (s *Side) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &str); err != nil {
 		return err
 	}
-	switch str {
-	case "BUY":
-		*s = Buy
-	case "SELL":
-		*s = Sell
-	default:
-		return fmt.Errorf("unknown side %q, must be BUY or SELL", str)
+	parsed, err := ParseSide(str)
+	if err != nil {
+		return err
 	}
+	*s = parsed
 	return nil
 }
 
@@ -73,6 +82,22 @@ func (s Status) String() string {
 		return "REJECTED"
 	default:
 		return "UNKNOWN"
+	}
+}
+
+// ParseStatus converts a string ("PENDING", "SUBMITTED", etc.) to a Status value.
+func ParseStatus(s string) (Status, error) {
+	switch s {
+	case "PENDING":
+		return Pending, nil
+	case "SUBMITTED":
+		return Submitted, nil
+	case "FULFILLED":
+		return Fulfilled, nil
+	case "REJECTED":
+		return Rejected, nil
+	default:
+		return 0, fmt.Errorf("unknown status %q", s)
 	}
 }
 

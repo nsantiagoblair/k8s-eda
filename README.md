@@ -37,7 +37,7 @@ User places a trade
 |---|---|---|
 | [1 — Go Basics](docs/chapter-01.md) | `01-go-basics` | Core Go concepts: structs, interfaces, error handling, and a `Trade` domain model. Unit tests for domain and store. |
 | [2 — HTTP API](docs/chapter-02.md) | `02-http-api` | HTTP server exposing `POST /trades`, `GET /trades/{id}`, `GET /trades`. Handler tests with `httptest`. |
-| 3 | `03-persistence` | In-memory store swapped for a real store; repository pattern introduced |
+| [3 — Persistence](docs/chapter-03.md) | `03-persistence` | SQLite store replacing in-memory; `database/sql`, upserts, scanning, `:memory:` in tests |
 | 4 | `04-provider-stub` | A stub provider service that accepts orders and returns a fulfilment |
 | 5 | `05-events` | Introduce a message broker; services communicate via events instead of direct calls |
 | 6 | `06-multi-service` | Split into `trade-api`, `order-service`, and `portfolio-service` |
