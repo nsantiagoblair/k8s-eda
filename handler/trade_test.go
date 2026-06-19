@@ -9,15 +9,14 @@ import (
 	"testing"
 
 	"github.com/nsantiagoblair/k8s-eda/handler"
-	"github.com/nsantiagoblair/k8s-eda/trade"
+	"github.com/nsantiagoblair/k8s-eda/store"
 )
 
 // newMux wires up a fresh store and handler for each test, ensuring tests are
 // isolated from each other.
 func newMux() *http.ServeMux {
-	store := trade.NewInMemoryStore()
 	mux := http.NewServeMux()
-	handler.NewTradeHandler(store).RegisterRoutes(mux)
+	handler.NewTradeHandler(store.NewInMemoryStore()).RegisterRoutes(mux)
 	return mux
 }
 
