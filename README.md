@@ -35,7 +35,7 @@ User places a trade
 
 | Chapter | Branch | What You Build |
 |---|---|---|
-| 1 | `01-go-basics` | Core Go concepts: structs, interfaces, error handling, and a `Trade` domain model |
+| [1 — Go Basics](docs/chapter-01.md) | `01-go-basics` | Core Go concepts: structs, interfaces, error handling, and a `Trade` domain model |
 | 2 | `02-http-api` | A simple HTTP server exposing `POST /trades` and `GET /trades/:id` |
 | 3 | `03-persistence` | In-memory store swapped for a real store; repository pattern introduced |
 | 4 | `04-provider-stub` | A stub provider service that accepts orders and returns a fulfilment |
@@ -45,34 +45,6 @@ User places a trade
 | 8 | `08-kubernetes` | Deploy everything to a local Kubernetes cluster with plain manifests |
 | 9 | `09-resilience` | Retries, dead-letter queues, and graceful degradation when the provider is slow |
 | 10 | `10-observability` | Structured logging, distributed tracing, and end-to-end event visibility |
-
----
-
-## Chapter 1 — Go Basics (`01-go-basics`)
-
-> **Goal:** Get comfortable with the Go concepts we'll use throughout the tutorial before adding any infrastructure.
-
-You will write a small self-contained Go program (no frameworks, no HTTP yet) that models the core trading domain.
-
-### Concepts covered
-
-- Structs and field tags
-- Interfaces and polymorphism
-- Error handling (`error` as a value)
-- Enums via `iota`
-- Simple in-memory operations
-
-### What you build
-
-A `Trade` struct with a `Side` enum (`BUY` / `SELL`), a `TradeStore` interface, and an in-memory implementation. A short `main.go` exercises placing trades and printing their state — proving the model works before we bolt on HTTP or a broker.
-
-```
-k8s-eda/
-└── main.go          ← entry point, exercises the domain
-└── trade/
-    ├── trade.go     ← Trade struct, Side enum, TradeStatus enum
-    └── store.go     ← TradeStore interface + in-memory implementation
-```
 
 ---
 
