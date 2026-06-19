@@ -78,6 +78,8 @@ func NewTradeHandler(store trade.Store) *TradeHandler {
 
 This is *dependency injection* — passing dependencies in rather than creating them internally. Because `store` is typed as the `Store` interface (not `*InMemoryStore`), the handler has no idea how trades are actually stored. In Chapter 3 we'll swap the in-memory store for a real one without touching a single line of handler code.
 
+> **Coming in Chapter 6:** When we add `OrderService` and `PortfolioService`, each will follow the same constructor injection pattern. A service layer will sit between the handler and the store, keeping orchestration logic out of the HTTP layer entirely.
+
 ### JSON encoding and decoding
 
 `encoding/json` is Go's built-in JSON package. For decoding a request body:

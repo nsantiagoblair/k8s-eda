@@ -146,6 +146,8 @@ type Store interface {
 
 The value of the interface is that the rest of the code — `main.go`, and later our HTTP handler — only ever talks to `Store`. When we swap the in-memory implementation for a real database in Chapter 3, nothing else needs to change.
 
+> **Coming in Chapter 6:** Right now `Store` is hand-fitted to `Trade` — every method references `*Trade` directly. Once we add `Order` and `Portfolio` entities we'll have three near-identical interfaces. That's when we'll introduce Go generics to define a single `Store[T]` interface that works for any entity.
+
 ### Methods and receivers
 
 A method is a function attached to a type via a *receiver*. We use pointer receivers (`*Trade`) when the method mutates the value:

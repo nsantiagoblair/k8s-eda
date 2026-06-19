@@ -148,6 +148,8 @@ s, err := store.NewSQLiteStore("trades.db")
 
 `handler.NewTradeHandler` still receives a `trade.Store`. It doesn't know or care that trades are now written to disk. This is the point of the interface — we changed the entire persistence mechanism without touching the delivery layer.
 
+> **Coming in Chapter 6:** Right now `Store` is tied to `Trade` specifically — every method signature mentions `*Trade`. When we add `Order` and `Portfolio` entities we'd need to write near-identical interfaces and implementations for each. That's when we'll introduce Go generics: a single `Store[T any]` interface that both `InMemoryStore` and `SQLiteStore` can implement for any entity type.
+
 ---
 
 ## Testing
