@@ -232,6 +232,69 @@ Expected output:
 
 ---
 
+## Testing
+
+Go's testing toolchain is built in — no third-party framework needed. Test files live alongside the code they test and end in `_test.go`. Run them all with:
+
+```bash
+go test ./...
+```
+
+### Test packages
+
+Test files can declare either the same package as the code under test (`package trade`) or an external package (`package trade_test`). We use the external form — it forces us to test through the public API only, the same way a real caller would.
+
+### Table-driven tests
+
+The idiomatic Go way to test multiple cases is a *table-driven test* — a slice of structs, one per case, iterated with `t.Run`:
+
+```go
+tests := []struct {
+    name    string
+    from    trade.Status
+    to      trade.Status
+    wantErr bool
+}{
+    {name: "pending → submitted", from: trade.Pending, to: trade.Submitted, wantErr: false},
+    {name: "fulfilled → submitted (invalid)", from: trade.Fulfilled, to: trade.Submitted, wantErr: true},
+    // ...
+}
+
+for _, tt := range tests {
+    t.Run(tt.name, func(t *testing.T) {
+        // exercise and assert
+    })
+}
+```
+
+`t.Run` gives each case its own named subtest. You can run a single case by name:
+
+```bash
+go test ./trade/... -run TestTransition/pending_→_submitted
+```
+
+### What's tested in this chapter
+
+**`trade/trade_test.go`**
+- `TestNew` — valid inputs create a trade in `PENDING` status with a non-empty ID; invalid inputs (empty asset, zero/negative quantity or price) return an error
+- `TestTransition` — every valid lifecycle move succeeds; every invalid one (skipping a step, moving backwards) returns an error
+- `TestTransition_UpdatesTimestamp` — `UpdatedAt` advances after a successful transition
+
+**`trade/store_test.go`**
+- `TestInMemoryStore_SaveAndFindByID` — a saved trade can be retrieved by ID
+- `TestInMemoryStore_Save_Overwrites` — saving the same trade twice updates it in place
+- `TestInMemoryStore_FindByID_NotFound` — a missing ID returns a typed `ErrNotFound`
+- `TestInMemoryStore_FindAll` — returns all saved trades; empty store returns empty slice
+- `TestInMemoryStore_FindByStatus` — filters trades correctly by status
+
+### Running the tests
+
+```bash
+go test ./trade/... -v
+```
+
+---
+
 ## What's next
 
 In **Chapter 2** (`02-http-api`) we'll expose this domain over HTTP — a `POST /trades` endpoint to create a trade and a `GET /trades/:id` endpoint to retrieve one. The `Store` interface we defined here means the HTTP handler won't need to know anything about how trades are stored.
