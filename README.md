@@ -48,6 +48,21 @@ User places a trade
 
 ---
 
+## Architecture Progression
+
+The project structure evolves deliberately across the chapters. Each change is introduced when it earns its keep, not upfront as ceremony.
+
+| Chapters | Structure | What's introduced |
+|---|---|---|
+| 1–2 | Flat: `trade/`, `handler/` | Domain isolation, repository interface, dependency injection |
+| 3 | `trade/`, `handler/`, real store adapter | Concrete repository pattern — swap implementation behind the interface |
+| 6 | `cmd/trade-api/`, `cmd/order-service/`, `internal/` | Multi-binary layout, `internal/` packages, application service layer |
+| 8+ | Full Hexagonal-style layering | Inbound adapters (HTTP, events), outbound adapters (store, broker), domain ports |
+
+By the end the architecture will reflect [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) (Ports & Adapters): the domain knows nothing about HTTP or the broker; handlers and event consumers are thin adapters that translate external calls into domain operations. A service layer sits between them and handles orchestration.
+
+---
+
 ## Prerequisites
 
 - [Go 1.22+](https://go.dev/dl/)
