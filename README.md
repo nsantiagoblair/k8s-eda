@@ -2,7 +2,7 @@
 
 A step-by-step tutorial for building an event-driven system on Kubernetes using **Go**, using a **share trading platform** as the domain.
 
-Each chapter maps to a branch so you can check out the repo at any point in the journey.
+Each chapter maps to a branch so you can check out the repo at any point in the journey. Tests are added to every chapter — each branch always has a fully green test suite.
 
 ---
 
@@ -35,8 +35,8 @@ User places a trade
 
 | Chapter | Branch | What You Build |
 |---|---|---|
-| [1 — Go Basics](docs/chapter-01.md) | `01-go-basics` | Core Go concepts: structs, interfaces, error handling, and a `Trade` domain model |
-| [2 — HTTP API](docs/chapter-02.md) | `02-http-api` | A simple HTTP server exposing `POST /trades`, `GET /trades/{id}`, and `GET /trades` |
+| [1 — Go Basics](docs/chapter-01.md) | `01-go-basics` | Core Go concepts: structs, interfaces, error handling, and a `Trade` domain model. Unit tests for domain and store. |
+| [2 — HTTP API](docs/chapter-02.md) | `02-http-api` | HTTP server exposing `POST /trades`, `GET /trades/{id}`, `GET /trades`. Handler tests with `httptest`. |
 | 3 | `03-persistence` | In-memory store swapped for a real store; repository pattern introduced |
 | 4 | `04-provider-stub` | A stub provider service that accepts orders and returns a fulfilment |
 | 5 | `05-events` | Introduce a message broker; services communicate via events instead of direct calls |

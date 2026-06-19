@@ -201,6 +201,61 @@ curl http://localhost:8080/trades/does-not-exist
 
 ---
 
+## Testing
+
+### `net/http/httptest`
+
+Go's standard library includes `net/http/httptest` — a package specifically for testing HTTP handlers without starting a real network server. It has two key types:
+
+- `httptest.NewRequest` — builds a fake `*http.Request`
+- `httptest.NewRecorder` — a fake `http.ResponseWriter` that captures status code, headers, and body
+
+```go
+req := httptest.NewRequest(http.MethodPost, "/trades", strings.NewReader(body))
+req.Header.Set("Content-Type", "application/json")
+w := httptest.NewRecorder()
+
+mux.ServeHTTP(w, req) // call the handler directly, no network involved
+
+if w.Code != http.StatusCreated {
+    t.Errorf("expected 201, got %d", w.Code)
+}
+```
+
+The handler runs exactly as it would in production — it just writes into `w` instead of a real TCP connection. This makes handler tests fast and deterministic.
+
+### Test isolation via `newMux()`
+
+Each test gets a fresh mux wired to a fresh in-memory store:
+
+```go
+func newMux() *http.ServeMux {
+    store := trade.NewInMemoryStore()
+    mux := http.NewServeMux()
+    handler.NewTradeHandler(store).RegisterRoutes(mux)
+    return mux
+}
+```
+
+This prevents tests from interfering with each other — no shared state between test cases.
+
+### What's tested in this chapter
+
+**`handler/trade_test.go`**
+- `TestCreateTrade` — table-driven: valid trades return `201`; invalid inputs (bad quantity, unknown side, malformed JSON) return `400`
+- `TestCreateTrade_ResponseShape` — the response body contains the expected JSON fields with the right values and serialised types (`"BUY"` not `0`)
+- `TestGetTradeByID` — a trade that exists returns `200`; an unknown ID returns `404`
+- `TestListTrades` — empty store returns an empty JSON array `[]` (not `null`); created trades appear in the list
+- `TestContentTypeIsJSON` — all responses set `Content-Type: application/json`
+
+### Running all tests
+
+```bash
+go test ./...
+```
+
+---
+
 ## What's next
 
 In **Chapter 3** (`03-persistence`) we'll replace the in-memory store with a real persistent store, introducing the repository pattern in more depth. Because the handler only depends on the `Store` interface, the swap will require zero changes to the handler code.
