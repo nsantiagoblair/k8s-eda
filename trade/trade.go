@@ -2,6 +2,7 @@
 package trade
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,6 +26,26 @@ func (s Side) String() string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+func (s Side) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+func (s *Side) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	switch str {
+	case "BUY":
+		*s = Buy
+	case "SELL":
+		*s = Sell
+	default:
+		return fmt.Errorf("unknown side %q, must be BUY or SELL", str)
+	}
+	return nil
 }
 
 // Status represents where a trade is in its lifecycle.
@@ -55,16 +76,20 @@ func (s Status) String() string {
 	}
 }
 
+func (s Status) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
 // Trade is an instruction to buy or sell a quantity of an asset.
 type Trade struct {
-	ID         string
-	Asset      string  // ticker symbol, e.g. "AAPL"
-	Side       Side
-	Quantity   int
-	LimitPrice float64 // maximum price willing to pay (BUY) or minimum to accept (SELL)
-	Status     Status
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID         string    `json:"id"`
+	Asset      string    `json:"asset"`
+	Side       Side      `json:"side"`
+	Quantity   int       `json:"quantity"`
+	LimitPrice float64   `json:"limitPrice"`
+	Status     Status    `json:"status"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // New creates a new Trade in Pending status.
