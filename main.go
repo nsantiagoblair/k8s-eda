@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/nick-blair/k8s-eda/trade"
+	"github.com/nsantiagoblair/k8s-eda/trade"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-module github.com/nick-blair/k8s-eda
+module github.com/nsantiagoblair/k8s-eda
 
 go 1.26.4
 
