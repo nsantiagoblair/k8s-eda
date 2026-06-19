@@ -37,10 +37,10 @@ User places a trade
 |---|---|---|
 | [1 — Go Basics](docs/chapter-01.md) | `01-go-basics` | Core Go concepts: structs, interfaces, error handling, and a `Trade` domain model. Unit tests for domain and store. |
 | [2 — HTTP API](docs/chapter-02.md) | `02-http-api` | HTTP server exposing `POST /trades`, `GET /trades/{id}`, `GET /trades`. Handler tests with `httptest`. |
-| 3 | `03-persistence` | In-memory store swapped for a real store; repository pattern introduced |
+| [3 — Persistence](docs/chapter-03.md) | `03-persistence` | SQLite store replacing in-memory; `database/sql`, upserts, scanning, `:memory:` in tests |
 | 4 | `04-provider-stub` | A stub provider service that accepts orders and returns a fulfilment |
 | 5 | `05-events` | Introduce a message broker; services communicate via events instead of direct calls |
-| 6 | `06-multi-service` | Split into `trade-api`, `order-service`, and `portfolio-service` |
+| 6 | `06-multi-service` | `Order` and `Portfolio` entities added; generic `Store[T]` introduced; split into `trade-api`, `order-service`, `portfolio-service`; `cmd/` and `internal/` layout; application service layer |
 | 7 | `07-containerise` | Dockerfiles for each service; images built and run locally |
 | 8 | `08-kubernetes` | Deploy everything to a local Kubernetes cluster with plain manifests |
 | 9 | `09-resilience` | Retries, dead-letter queues, and graceful degradation when the provider is slow |
@@ -54,9 +54,9 @@ The project structure evolves deliberately across the chapters. Each change is i
 
 | Chapters | Structure | What's introduced |
 |---|---|---|
-| 1–2 | Flat: `trade/`, `handler/` | Domain isolation, repository interface, dependency injection |
-| 3 | `trade/`, `handler/`, real store adapter | Concrete repository pattern — swap implementation behind the interface |
-| 6 | `cmd/trade-api/`, `cmd/order-service/`, `internal/` | Multi-binary layout, `internal/` packages, application service layer |
+| 1–2 | Flat: `trade/`, `handler/`, `store/` | Domain isolation, repository interface, dependency injection |
+| 3 | `store/` gains `SQLiteStore` alongside `InMemoryStore` | Concrete repository pattern — swap implementation behind the interface |
+| 6 | `cmd/`, `internal/`, service layer | Multi-binary layout; `Order` + `Portfolio` entities; generic `Store[T]`; application service layer |
 | 8+ | Full Hexagonal-style layering | Inbound adapters (HTTP, events), outbound adapters (store, broker), domain ports |
 
 By the end the architecture will reflect [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) (Ports & Adapters): the domain knows nothing about HTTP or the broker; handlers and event consumers are thin adapters that translate external calls into domain operations. A service layer sits between them and handles orchestration.
