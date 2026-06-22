@@ -176,6 +176,127 @@ go test ./...
 
 ---
 
+## Manual testing
+
+This section walks through running the server, calling the API, inspecting the database directly, and verifying that trades survive a restart.
+
+### 1. Start the server
+
+```bash
+go run .
+# 2026/06/22 10:00:00 server listening on :8080
+```
+
+A `trades.db` file will be created in the project root the first time a trade is saved.
+
+### 2. Create some trades
+
+```bash
+# Buy 10 shares of AAPL
+curl -s -X POST http://localhost:8080/trades \
+  -H 'Content-Type: application/json' \
+  -d '{"asset":"AAPL","side":"BUY","quantity":10,"limitPrice":195.00}' | jq .
+
+# Sell 3 shares of NVDA
+curl -s -X POST http://localhost:8080/trades \
+  -H 'Content-Type: application/json' \
+  -d '{"asset":"NVDA","side":"SELL","quantity":3,"limitPrice":890.00}' | jq .
+
+# Buy 5 shares of TSLA
+curl -s -X POST http://localhost:8080/trades \
+  -H 'Content-Type: application/json' \
+  -d '{"asset":"TSLA","side":"BUY","quantity":5,"limitPrice":250.00}' | jq .
+```
+
+Each response should include a full trade object with a UUID and `"status": "PENDING"`.
+
+### 3. List all trades
+
+```bash
+curl -s http://localhost:8080/trades | jq .
+```
+
+You should see all three trades. Copy one of the IDs for the next step.
+
+### 4. Fetch a single trade
+
+```bash
+curl -s http://localhost:8080/trades/<id> | jq .
+```
+
+### 5. Inspect the database directly
+
+While the server is running (or after stopping it), you can query `trades.db` directly to see exactly what was written.
+
+**Option A — `sqlite3` CLI** (ships with macOS, no install needed)
+
+```bash
+sqlite3 trades.db
+```
+
+```sql
+-- list all trades
+SELECT id, asset, side, quantity, limit_price, status FROM trades;
+
+-- filter by status
+SELECT * FROM trades WHERE status = 'PENDING';
+
+-- check the schema
+.schema trades
+
+-- exit
+.quit
+```
+
+**Option B — DB Browser for SQLite** (free GUI, recommended if you prefer a visual tool)
+
+Install via Homebrew:
+
+```bash
+brew install --cask db-browser-for-sqlite
+```
+
+Then:
+1. Open **DB Browser for SQLite**
+2. Click **Open Database** and select `trades.db` from the project root
+3. Click the **Browse Data** tab and select the `trades` table
+4. You'll see all rows with their columns — asset, side, quantity, limit_price, status, timestamps
+
+It looks like this:
+
+| id | asset | side | quantity | limit_price | status | created_at |
+|---|---|---|---|---|---|---|
+| 2805d2b6-... | AAPL | BUY | 10 | 195.0 | PENDING | 2026-06-22T... |
+| 9e78009a-... | NVDA | SELL | 3 | 890.0 | PENDING | 2026-06-22T... |
+
+### 6. Verify persistence across restarts
+
+This is the key difference from Chapter 2. Stop the server with `Ctrl+C`, restart it, and list trades again:
+
+```bash
+# Stop the server (Ctrl+C), then:
+go run .
+
+# Trades are still there
+curl -s http://localhost:8080/trades | jq 'length'
+# 3
+```
+
+In Chapter 2 this would have returned `0` — the in-memory store was wiped on exit. Now it returns `3` because the data lives in `trades.db`.
+
+### 7. Trigger a validation error
+
+```bash
+curl -s -X POST http://localhost:8080/trades \
+  -H 'Content-Type: application/json' \
+  -d '{"asset":"MSFT","side":"BUY","quantity":0,"limitPrice":420.00}' | jq .
+# { "error": "quantity must be positive, got 0" }
+```
+
+The store is never touched — validation happens in the domain layer before `Save` is called, so no partial data ends up in the database.
+
+---
+
 ## Running it
 
 ```bash
@@ -183,7 +304,7 @@ go run .
 # server listening on :8080
 ```
 
-Trades now survive a server restart. The `trades.db` file is created in the working directory (and is `.gitignore`d so it doesn't end up in source control).
+Trades survive a server restart. The `trades.db` file is created in the working directory and is `.gitignore`d so it stays out of source control.
 
 ---
 
