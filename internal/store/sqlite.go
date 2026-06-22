@@ -1,4 +1,3 @@
-// Package store contains concrete implementations of trade.Store.
 package store
 
 import (
@@ -6,22 +5,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nsantiagoblair/k8s-eda/trade"
+	"github.com/nsantiagoblair/k8s-eda/internal/trade"
 
-	// The blank import registers the SQLite driver with database/sql.
-	// We never reference modernc.org/sqlite directly — database/sql calls it
-	// through the driver interface.
 	_ "modernc.org/sqlite"
 )
 
-// SQLiteStore is a persistent implementation of trade.Store backed by SQLite.
+// SQLiteStore is a persistent implementation of Store[*trade.Trade] backed by SQLite.
+// SQL schemas are entity-specific so this store is not generic — unlike InMemoryStore[T].
+// The trade-agnostic Store[T] interface is still satisfied, allowing the service layer
+// to swap between SQLiteStore and InMemoryStore[*trade.Trade] without changes.
 type SQLiteStore struct {
 	db *sql.DB
 }
 
-// NewSQLiteStore opens (or creates) a SQLite database at path and runs
-// migrations to ensure the schema is up to date.
-// Use ":memory:" as path for an in-process, ephemeral database (useful in tests).
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -35,9 +31,6 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	return s, nil
 }
 
-// migrate creates the trades table if it doesn't already exist.
-// In later chapters this would be handled by a migration tool (e.g. goose),
-// but for now a single idempotent statement is enough.
 func (s *SQLiteStore) migrate() error {
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS trades (
@@ -54,12 +47,10 @@ func (s *SQLiteStore) migrate() error {
 	return err
 }
 
-// Close releases the underlying database connection.
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
-// Save inserts a new trade or replaces an existing one with the same ID.
 func (s *SQLiteStore) Save(t *trade.Trade) error {
 	_, err := s.db.Exec(`
 		INSERT INTO trades (id, asset, side, quantity, limit_price, status, created_at, updated_at)
@@ -68,11 +59,7 @@ func (s *SQLiteStore) Save(t *trade.Trade) error {
 			status     = excluded.status,
 			updated_at = excluded.updated_at
 	`,
-		t.ID,
-		t.Asset,
-		t.Side.String(),
-		t.Quantity,
-		t.LimitPrice,
+		t.ID, t.Asset, t.Side.String(), t.Quantity, t.LimitPrice,
 		t.Status.String(),
 		t.CreatedAt.Format(time.RFC3339Nano),
 		t.UpdatedAt.Format(time.RFC3339Nano),
@@ -83,8 +70,6 @@ func (s *SQLiteStore) Save(t *trade.Trade) error {
 	return nil
 }
 
-// FindByID retrieves a single trade by its ID, returning ErrNotFound if it
-// doesn't exist.
 func (s *SQLiteStore) FindByID(id string) (*trade.Trade, error) {
 	row := s.db.QueryRow(`
 		SELECT id, asset, side, quantity, limit_price, status, created_at, updated_at
@@ -93,7 +78,7 @@ func (s *SQLiteStore) FindByID(id string) (*trade.Trade, error) {
 
 	t, err := scanTrade(row.Scan)
 	if err == sql.ErrNoRows {
-		return nil, &trade.ErrNotFound{ID: id}
+		return nil, &ErrNotFound{ID: id}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find trade %s: %w", id, err)
@@ -101,7 +86,6 @@ func (s *SQLiteStore) FindByID(id string) (*trade.Trade, error) {
 	return t, nil
 }
 
-// FindAll returns every trade in the store.
 func (s *SQLiteStore) FindAll() ([]*trade.Trade, error) {
 	rows, err := s.db.Query(`
 		SELECT id, asset, side, quantity, limit_price, status, created_at, updated_at
@@ -111,11 +95,12 @@ func (s *SQLiteStore) FindAll() ([]*trade.Trade, error) {
 		return nil, fmt.Errorf("find all trades: %w", err)
 	}
 	defer rows.Close()
-
 	return collectRows(rows)
 }
 
-// FindByStatus returns all trades with the given status.
+// FindByStatus returns all trades with the given status. This method is not
+// part of Store[T] — it is a trade-specific query available on the concrete
+// type when callers need SQL-level filtering.
 func (s *SQLiteStore) FindByStatus(status trade.Status) ([]*trade.Trade, error) {
 	rows, err := s.db.Query(`
 		SELECT id, asset, side, quantity, limit_price, status, created_at, updated_at
@@ -125,21 +110,18 @@ func (s *SQLiteStore) FindByStatus(status trade.Status) ([]*trade.Trade, error) 
 		return nil, fmt.Errorf("find trades by status %s: %w", status, err)
 	}
 	defer rows.Close()
-
 	return collectRows(rows)
 }
 
 // --- helpers ----------------------------------------------------------------
 
-// scanFunc is the common signature for both row.Scan and rows.Scan, letting
-// us share the scanning logic between single-row and multi-row queries.
 type scanFunc func(dest ...any) error
 
 func scanTrade(scan scanFunc) (*trade.Trade, error) {
 	var (
-		t                        trade.Trade
-		sideStr, statusStr       string
-		createdAtStr, updatedAt  string
+		t                       trade.Trade
+		sideStr, statusStr      string
+		createdAtStr, updatedAt string
 	)
 
 	err := scan(

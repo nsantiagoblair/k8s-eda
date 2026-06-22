@@ -1,14 +1,7 @@
-// Provider stub — consumes TradeSubmitted events, evaluates each order, and
-// publishes TradeFulfilled or TradeRejected back to Kafka.
-//
-// In Chapter 4 this was an HTTP server. In Chapter 5 it becomes a pure
-// event-driven service: no HTTP port, no direct coupling to the trade API.
-// Neither service needs to know the other's address.
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"log"
 	"os"
@@ -16,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nsantiagoblair/k8s-eda/broker"
-	"github.com/nsantiagoblair/k8s-eda/event"
+	"github.com/nsantiagoblair/k8s-eda/internal/broker"
+	"github.com/nsantiagoblair/k8s-eda/internal/event"
 )
 
 func main() {
@@ -35,8 +28,9 @@ func main() {
 	c := broker.NewKafkaConsumer([]string{*brokers}, event.TopicTradeSubmitted, "provider-stub")
 	defer c.Close()
 
+	// Use the generic HandlerFunc to handle unmarshalling automatically.
 	log.Println("provider stub listening for TradeSubmitted events...")
-	if err := c.Run(ctx, h.handle); err != nil {
+	if err := c.Run(ctx, broker.HandlerFunc[event.TradeSubmitted](h.evaluate)); err != nil {
 		log.Printf("consumer stopped: %v", err)
 	}
 }
@@ -45,21 +39,12 @@ type orderHandler struct {
 	publisher broker.Publisher
 }
 
-func (h *orderHandler) handle(ctx context.Context, msg []byte) error {
-	var e event.TradeSubmitted
-	if err := json.Unmarshal(msg, &e); err != nil {
-		return err
-	}
-
-	log.Printf("evaluating order: tradeID=%s asset=%s side=%s qty=%d limit=%.2f",
-		e.TradeID, e.Asset, e.Side, e.Quantity, e.LimitPrice)
-
-	return h.evaluate(ctx, e)
-}
-
 const minimumPrice = 10.00
 
 func (h *orderHandler) evaluate(ctx context.Context, e event.TradeSubmitted) error {
+	log.Printf("evaluating order: tradeID=%s asset=%s side=%s qty=%d limit=%.2f",
+		e.TradeID, e.Asset, e.Side, e.Quantity, e.LimitPrice)
+
 	if e.LimitPrice < minimumPrice {
 		return h.publisher.Publish(ctx, event.TopicTradeRejected, event.TradeRejected{
 			TradeID:    e.TradeID,
@@ -75,3 +60,4 @@ func (h *orderHandler) evaluate(ctx context.Context, e event.TradeSubmitted) err
 		OccurredAt:  time.Now(),
 	})
 }
+

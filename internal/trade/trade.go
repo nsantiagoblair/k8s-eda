@@ -1,4 +1,5 @@
 // Package trade defines the core domain model for the share trading system.
+// It contains only pure domain logic — no HTTP, no database, no broker imports.
 package trade
 
 import (
@@ -85,7 +86,7 @@ func (s Status) String() string {
 	}
 }
 
-// ParseStatus converts a string ("PENDING", "SUBMITTED", etc.) to a Status value.
+// ParseStatus converts a status string to a Status value.
 func ParseStatus(s string) (Status, error) {
 	switch s {
 	case "PENDING":
@@ -142,18 +143,29 @@ func New(asset string, side Side, quantity int, limitPrice float64) (*Trade, err
 	}, nil
 }
 
-// Transition moves the trade to a new status, returning an error if the
-// transition is not valid for the current state.
+// ErrInvalidTransition is returned when a status change is not permitted.
+// Using a typed error lets callers (e.g. the HTTP handler) distinguish a
+// domain rule violation from an unexpected error and map it to 409 Conflict.
+type ErrInvalidTransition struct {
+	From Status
+	To   Status
+}
+
+func (e *ErrInvalidTransition) Error() string {
+	return fmt.Sprintf("cannot transition trade from %s to %s", e.From, e.To)
+}
+
+// Transition moves the trade to a new status, returning ErrInvalidTransition
+// if the move is not allowed from the current state.
 func (t *Trade) Transition(next Status) error {
-	valid := validTransitions[t.Status]
-	for _, allowed := range valid {
+	for _, allowed := range validTransitions[t.Status] {
 		if allowed == next {
 			t.Status = next
 			t.UpdatedAt = time.Now()
 			return nil
 		}
 	}
-	return fmt.Errorf("cannot transition trade from %s to %s", t.Status, next)
+	return &ErrInvalidTransition{From: t.Status, To: next}
 }
 
 // validTransitions maps each status to the statuses it may move to.
