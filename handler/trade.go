@@ -6,25 +6,26 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/nsantiagoblair/k8s-eda/provider"
 	"github.com/nsantiagoblair/k8s-eda/trade"
 )
 
 // TradeHandler handles HTTP requests for trade operations.
-// It holds a reference to a Store, injected at construction time.
 type TradeHandler struct {
-	store trade.Store
+	store    trade.Store
+	provider provider.Provider
 }
 
-func NewTradeHandler(store trade.Store) *TradeHandler {
-	return &TradeHandler{store: store}
+func NewTradeHandler(store trade.Store, p provider.Provider) *TradeHandler {
+	return &TradeHandler{store: store, provider: p}
 }
 
 // RegisterRoutes wires up the trade endpoints on the provided mux.
-// Go 1.22+ supports method-prefixed patterns and {path} parameters natively.
 func (h *TradeHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /trades", h.create)
 	mux.HandleFunc("GET /trades/{id}", h.getByID)
 	mux.HandleFunc("GET /trades", h.list)
+	mux.HandleFunc("POST /trades/{id}/submit", h.submit)
 }
 
 // createRequest is the expected JSON body for POST /trades.
@@ -84,6 +85,68 @@ func (h *TradeHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, trades)
+}
+
+// POST /trades/{id}/submit
+//
+// Submits a PENDING trade to the provider for execution. The trade transitions
+// to SUBMITTED before the provider call, then to FULFILLED or REJECTED based
+// on the provider response.
+func (h *TradeHandler) submit(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	t, err := h.store.FindByID(id)
+	if err != nil {
+		var notFound *trade.ErrNotFound
+		if errors.As(err, &notFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to retrieve trade")
+		return
+	}
+
+	// Transition to SUBMITTED — this also validates the trade is currently PENDING.
+	if err := t.Transition(trade.Submitted); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if err := h.store.Save(t); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save trade")
+		return
+	}
+
+	// Call the provider. Pass r.Context() so the request is cancelled if the
+	// HTTP client disconnects before the provider responds.
+	resp, err := h.provider.Submit(r.Context(), provider.SubmitRequest{
+		TradeID:    t.ID,
+		Asset:      t.Asset,
+		Side:       t.Side.String(),
+		Quantity:   t.Quantity,
+		LimitPrice: t.LimitPrice,
+	})
+	if err != nil {
+		// Provider call failed — trade stays SUBMITTED (in-flight but unconfirmed).
+		writeError(w, http.StatusBadGateway, "provider unavailable: "+err.Error())
+		return
+	}
+
+	// Translate provider response to a domain transition.
+	finalStatus := trade.Fulfilled
+	if resp.Status == "REJECTED" {
+		finalStatus = trade.Rejected
+	}
+
+	if err := t.Transition(finalStatus); err != nil {
+		writeError(w, http.StatusInternalServerError, "unexpected state transition error")
+		return
+	}
+	if err := h.store.Save(t); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save trade")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, t)
 }
 
 // --- helpers ----------------------------------------------------------------
