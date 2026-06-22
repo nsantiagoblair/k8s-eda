@@ -1,60 +1,77 @@
-// Provider stub — simulates an external trade execution provider.
+// Provider stub — consumes TradeSubmitted events, evaluates each order, and
+// publishes TradeFulfilled or TradeRejected back to Kafka.
 //
-// In a real system this would be a third-party service we have no control
-// over. The stub lets us develop and test the trade API without a live
-// integration, and will be replaced by event-driven communication in Chapter 5.
+// In Chapter 4 this was an HTTP server. In Chapter 5 it becomes a pure
+// event-driven service: no HTTP port, no direct coupling to the trade API.
+// Neither service needs to know the other's address.
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"flag"
 	"log"
-	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/nsantiagoblair/k8s-eda/provider"
+	"github.com/nsantiagoblair/k8s-eda/broker"
+	"github.com/nsantiagoblair/k8s-eda/event"
 )
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /orders", handleOrder)
+	brokers := flag.String("brokers", "localhost:9092", "comma-separated Kafka broker addresses")
+	flag.Parse()
 
-	log.Println("provider stub listening on :9090")
-	log.Fatal(http.ListenAndServe(":9090", mux))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	pub := broker.NewKafkaPublisher([]string{*brokers})
+	defer pub.Close()
+
+	h := &orderHandler{publisher: pub}
+
+	c := broker.NewKafkaConsumer([]string{*brokers}, event.TopicTradeSubmitted, "provider-stub")
+	defer c.Close()
+
+	log.Println("provider stub listening for TradeSubmitted events...")
+	if err := c.Run(ctx, h.handle); err != nil {
+		log.Printf("consumer stopped: %v", err)
+	}
 }
 
-func handleOrder(w http.ResponseWriter, r *http.Request) {
-	var req provider.SubmitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	log.Printf("received order: tradeID=%s asset=%s side=%s qty=%d limit=%.2f",
-		req.TradeID, req.Asset, req.Side, req.Quantity, req.LimitPrice)
-
-	resp := evaluate(req)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp) //nolint:errcheck
+type orderHandler struct {
+	publisher broker.Publisher
 }
 
-// evaluate applies simple stub logic to decide whether to fulfil or reject an
-// order. Real providers use order books and market prices; we use a price floor.
-func evaluate(req provider.SubmitRequest) provider.SubmitResponse {
-	const minimumPrice = 10.00
-
-	if req.LimitPrice < minimumPrice {
-		return provider.SubmitResponse{
-			TradeID: req.TradeID,
-			Status:  "REJECTED",
-			Reason:  "limit price below minimum accepted threshold",
-		}
+func (h *orderHandler) handle(ctx context.Context, msg []byte) error {
+	var e event.TradeSubmitted
+	if err := json.Unmarshal(msg, &e); err != nil {
+		return err
 	}
 
-	return provider.SubmitResponse{
-		TradeID:     req.TradeID,
-		Status:      "FULFILLED",
-		FilledPrice: req.LimitPrice,
+	log.Printf("evaluating order: tradeID=%s asset=%s side=%s qty=%d limit=%.2f",
+		e.TradeID, e.Asset, e.Side, e.Quantity, e.LimitPrice)
+
+	return h.evaluate(ctx, e)
+}
+
+const minimumPrice = 10.00
+
+func (h *orderHandler) evaluate(ctx context.Context, e event.TradeSubmitted) error {
+	if e.LimitPrice < minimumPrice {
+		return h.publisher.Publish(ctx, event.TopicTradeRejected, event.TradeRejected{
+			TradeID:    e.TradeID,
+			Reason:     "limit price below minimum accepted threshold",
+			OccurredAt: time.Now(),
+		})
+	}
+
+	return h.publisher.Publish(ctx, event.TopicTradeFulfilled, event.TradeFulfilled{
+		TradeID:     e.TradeID,
+		FilledPrice: e.LimitPrice,
 		FilledAt:    time.Now(),
-	}
+		OccurredAt:  time.Now(),
+	})
 }

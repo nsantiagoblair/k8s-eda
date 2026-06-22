@@ -5,19 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
-	"github.com/nsantiagoblair/k8s-eda/provider"
+	"github.com/nsantiagoblair/k8s-eda/broker"
+	"github.com/nsantiagoblair/k8s-eda/event"
 	"github.com/nsantiagoblair/k8s-eda/trade"
 )
 
 // TradeHandler handles HTTP requests for trade operations.
 type TradeHandler struct {
-	store    trade.Store
-	provider provider.Provider
+	store     trade.Store
+	publisher broker.Publisher
 }
 
-func NewTradeHandler(store trade.Store, p provider.Provider) *TradeHandler {
-	return &TradeHandler{store: store, provider: p}
+func NewTradeHandler(store trade.Store, publisher broker.Publisher) *TradeHandler {
+	return &TradeHandler{store: store, publisher: publisher}
 }
 
 // RegisterRoutes wires up the trade endpoints on the provided mux.
@@ -89,9 +91,10 @@ func (h *TradeHandler) list(w http.ResponseWriter, r *http.Request) {
 
 // POST /trades/{id}/submit
 //
-// Submits a PENDING trade to the provider for execution. The trade transitions
-// to SUBMITTED before the provider call, then to FULFILLED or REJECTED based
-// on the provider response.
+// Transitions the trade to SUBMITTED and publishes a TradeSubmitted event.
+// Returns 202 Accepted immediately — the final outcome (FULFILLED/REJECTED)
+// arrives asynchronously via the trade-fulfilled and trade-rejected topics.
+// Poll GET /trades/{id} to check the current status.
 func (h *TradeHandler) submit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
@@ -106,7 +109,6 @@ func (h *TradeHandler) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Transition to SUBMITTED — this also validates the trade is currently PENDING.
 	if err := t.Transition(trade.Submitted); err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return
@@ -116,37 +118,22 @@ func (h *TradeHandler) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Call the provider. Pass r.Context() so the request is cancelled if the
-	// HTTP client disconnects before the provider responds.
-	resp, err := h.provider.Submit(r.Context(), provider.SubmitRequest{
+	evt := event.TradeSubmitted{
 		TradeID:    t.ID,
 		Asset:      t.Asset,
 		Side:       t.Side.String(),
 		Quantity:   t.Quantity,
 		LimitPrice: t.LimitPrice,
-	})
-	if err != nil {
-		// Provider call failed — trade stays SUBMITTED (in-flight but unconfirmed).
-		writeError(w, http.StatusBadGateway, "provider unavailable: "+err.Error())
+		OccurredAt: time.Now(),
+	}
+	if err := h.publisher.Publish(r.Context(), event.TopicTradeSubmitted, evt); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to publish event")
 		return
 	}
 
-	// Translate provider response to a domain transition.
-	finalStatus := trade.Fulfilled
-	if resp.Status == "REJECTED" {
-		finalStatus = trade.Rejected
-	}
-
-	if err := t.Transition(finalStatus); err != nil {
-		writeError(w, http.StatusInternalServerError, "unexpected state transition error")
-		return
-	}
-	if err := h.store.Save(t); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to save trade")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, t)
+	// 202 Accepted: the request has been accepted for processing but is not
+	// yet complete. The client should poll GET /trades/{id} for the outcome.
+	writeJSON(w, http.StatusAccepted, t)
 }
 
 // --- helpers ----------------------------------------------------------------

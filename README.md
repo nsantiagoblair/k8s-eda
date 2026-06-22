@@ -39,7 +39,7 @@ User places a trade
 | [2 — HTTP API](docs/chapter-02.md) | `02-http-api` | HTTP server exposing `POST /trades`, `GET /trades/{id}`, `GET /trades`. Handler tests with `httptest`. |
 | [3 — Persistence](docs/chapter-03.md) | `03-persistence` | SQLite store replacing in-memory; `database/sql`, upserts, scanning, `:memory:` in tests |
 | [4 — Provider Stub](docs/chapter-04.md) | `04-provider-stub` | Synchronous HTTP integration with a stub provider; `cmd/` layout, HTTP client, `context.Context`, mocks |
-| 5 | `05-events` | Introduce a message broker; services communicate via events instead of direct calls |
+| [5 — Events](docs/chapter-05.md) | `05-events` | Kafka replaces synchronous HTTP; `TradeSubmitted` / `TradeFulfilled` events; goroutines, graceful shutdown, 202 Accepted |
 | 6 | `06-multi-service` | `Order` and `Portfolio` entities added; generic `Store[T]` introduced; split into `trade-api`, `order-service`, `portfolio-service`; `cmd/` and `internal/` layout; application service layer |
 | 7 | `07-containerise` | Dockerfiles for each service; images built and run locally |
 | 8 | `08-kubernetes` | Deploy everything to a local Kubernetes cluster with plain manifests |
@@ -56,6 +56,7 @@ The project structure evolves deliberately across the chapters. Each change is i
 |---|---|---|
 | 1–2 | Flat: `trade/`, `handler/`, `store/` | Domain isolation, repository interface, dependency injection |
 | 3 | `store/` gains `SQLiteStore` alongside `InMemoryStore` | Concrete repository pattern — swap implementation behind the interface |
+| 5 | `event/`, `broker/`, `consumer/` added | Event types separate from transport; Ports & Adapters for the broker; goroutines, graceful shutdown |
 | 6 | `cmd/`, `internal/`, service layer | Multi-binary layout; `Order` + `Portfolio` entities; generic `Store[T]`; application service layer |
 | 8+ | Full Hexagonal-style layering | Inbound adapters (HTTP, events), outbound adapters (store, broker), domain ports |
 
