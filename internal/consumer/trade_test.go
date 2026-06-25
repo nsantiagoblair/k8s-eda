@@ -4,18 +4,17 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nsantiagoblair/k8s-eda/internal/broker"
 	"github.com/nsantiagoblair/k8s-eda/internal/consumer"
 	"github.com/nsantiagoblair/k8s-eda/internal/event"
+	"github.com/nsantiagoblair/k8s-eda/internal/infra/memory"
 	"github.com/nsantiagoblair/k8s-eda/internal/service"
-	"github.com/nsantiagoblair/k8s-eda/internal/store"
 	"github.com/nsantiagoblair/k8s-eda/internal/trade"
 )
 
 func newSubmittedTrade(t *testing.T) (*service.TradeService, *trade.Trade) {
 	t.Helper()
-	s := store.NewInMemoryStore(func(tr *trade.Trade) string { return tr.ID })
-	svc := service.NewTradeService(s, broker.NewInMemoryPublisher())
+	s := memory.NewStore(func(tr *trade.Trade) string { return tr.ID })
+	svc := service.NewTradeService(s, memory.NewPublisher())
 	tr, _ := svc.Create("AAPL", trade.Buy, 10, 150.00)
 	svc.Submit(context.Background(), tr.ID) //nolint:errcheck
 	return svc, tr
@@ -25,7 +24,7 @@ func TestFulfilledHandler(t *testing.T) {
 	svc, tr := newSubmittedTrade(t)
 	h := consumer.FulfilledHandler(svc)
 
-	pub := broker.NewInMemoryPublisher()
+	pub := memory.NewPublisher()
 	pub.Publish(context.Background(), "t", event.TradeFulfilled{TradeID: tr.ID}) //nolint:errcheck
 	payload := pub.Messages("t")[0]
 
@@ -43,7 +42,7 @@ func TestRejectedHandler(t *testing.T) {
 	svc, tr := newSubmittedTrade(t)
 	h := consumer.RejectedHandler(svc)
 
-	pub := broker.NewInMemoryPublisher()
+	pub := memory.NewPublisher()
 	pub.Publish(context.Background(), "t", event.TradeRejected{TradeID: tr.ID}) //nolint:errcheck
 	payload := pub.Messages("t")[0]
 

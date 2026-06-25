@@ -11,6 +11,7 @@ import (
 
 	"github.com/nsantiagoblair/k8s-eda/internal/broker"
 	"github.com/nsantiagoblair/k8s-eda/internal/event"
+	"github.com/nsantiagoblair/k8s-eda/internal/infra/kafka"
 )
 
 func main() {
@@ -20,12 +21,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pub := broker.NewKafkaPublisher([]string{*brokers})
+	pub := kafka.NewPublisher([]string{*brokers})
 	defer pub.Close()
 
 	h := &orderHandler{publisher: pub}
 
-	c := broker.NewKafkaConsumer([]string{*brokers}, event.TopicTradeSubmitted, "provider-stub")
+	c := kafka.NewConsumer([]string{*brokers}, event.TopicTradeSubmitted, "provider-stub")
 	defer c.Close()
 
 	// Use the generic HandlerFunc to handle unmarshalling automatically.

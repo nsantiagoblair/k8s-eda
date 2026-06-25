@@ -12,12 +12,12 @@ import (
 	"github.com/nsantiagoblair/k8s-eda/internal/event"
 	"github.com/nsantiagoblair/k8s-eda/internal/handler"
 	"github.com/nsantiagoblair/k8s-eda/internal/service"
-	"github.com/nsantiagoblair/k8s-eda/internal/store"
+	"github.com/nsantiagoblair/k8s-eda/internal/infra/memory"
 	"github.com/nsantiagoblair/k8s-eda/internal/trade"
 )
 
 func newMux(pub broker.Publisher) *http.ServeMux {
-	s := store.NewInMemoryStore(func(t *trade.Trade) string { return t.ID })
+	s := memory.NewStore(func(t *trade.Trade) string { return t.ID })
 	svc := service.NewTradeService(s, pub)
 	mux := http.NewServeMux()
 	handler.NewTradeHandler(svc).RegisterRoutes(mux)
@@ -55,7 +55,7 @@ func TestCreateTrade(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := post(newMux(broker.NewInMemoryPublisher()), "/trades", tt.body)
+			w := post(newMux(memory.NewPublisher()), "/trades", tt.body)
 			if w.Code != tt.wantStatus {
 				t.Errorf("expected %d, got %d — %s", tt.wantStatus, w.Code, w.Body.String())
 			}
@@ -64,7 +64,7 @@ func TestCreateTrade(t *testing.T) {
 }
 
 func TestCreateTrade_ResponseShape(t *testing.T) {
-	w := post(newMux(broker.NewInMemoryPublisher()), "/trades", `{"asset":"AAPL","side":"BUY","quantity":10,"limitPrice":195.00}`)
+	w := post(newMux(memory.NewPublisher()), "/trades", `{"asset":"AAPL","side":"BUY","quantity":10,"limitPrice":195.00}`)
 	if w.Code != http.StatusCreated { t.Fatalf("expected 201, got %d", w.Code) }
 
 	var resp struct {
@@ -79,7 +79,7 @@ func TestCreateTrade_ResponseShape(t *testing.T) {
 }
 
 func TestGetTradeByID(t *testing.T) {
-	mux := newMux(broker.NewInMemoryPublisher())
+	mux := newMux(memory.NewPublisher())
 	w := post(mux, "/trades", `{"asset":"AAPL","side":"BUY","quantity":10,"limitPrice":195.00}`)
 	var created struct{ ID string `json:"id"` }
 	json.NewDecoder(w.Body).Decode(&created) //nolint:errcheck
@@ -93,7 +93,7 @@ func TestGetTradeByID(t *testing.T) {
 }
 
 func TestListTrades(t *testing.T) {
-	mux := newMux(broker.NewInMemoryPublisher())
+	mux := newMux(memory.NewPublisher())
 
 	w := get(mux, "/trades")
 	if w.Code != http.StatusOK { t.Fatalf("expected 200, got %d", w.Code) }
@@ -118,7 +118,7 @@ func TestSubmitTrade(t *testing.T) {
 	}
 
 	t.Run("returns 202 and publishes event", func(t *testing.T) {
-		pub := broker.NewInMemoryPublisher()
+		pub := memory.NewPublisher()
 		mux := newMux(pub)
 		id := createTrade(mux)
 
@@ -138,12 +138,12 @@ func TestSubmitTrade(t *testing.T) {
 	})
 
 	t.Run("trade not found returns 404", func(t *testing.T) {
-		w := post(newMux(broker.NewInMemoryPublisher()), "/trades/no-such-id/submit", "")
+		w := post(newMux(memory.NewPublisher()), "/trades/no-such-id/submit", "")
 		if w.Code != http.StatusNotFound { t.Errorf("expected 404, got %d", w.Code) }
 	})
 
 	t.Run("already submitted returns 409", func(t *testing.T) {
-		mux := newMux(broker.NewInMemoryPublisher())
+		mux := newMux(memory.NewPublisher())
 		id := createTrade(mux)
 		post(mux, "/trades/"+id+"/submit", "")
 		w := post(mux, "/trades/"+id+"/submit", "")
@@ -152,7 +152,7 @@ func TestSubmitTrade(t *testing.T) {
 }
 
 func TestContentTypeIsJSON(t *testing.T) {
-	w := post(newMux(broker.NewInMemoryPublisher()), "/trades", `{"asset":"AAPL","side":"BUY","quantity":10,"limitPrice":195.00}`)
+	w := post(newMux(memory.NewPublisher()), "/trades", `{"asset":"AAPL","side":"BUY","quantity":10,"limitPrice":195.00}`)
 	ct := w.Header().Get("Content-Type")
 	if !strings.Contains(ct, "application/json") {
 		t.Errorf("Content-Type = %s; want application/json", ct)

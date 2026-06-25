@@ -5,17 +5,17 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nsantiagoblair/k8s-eda/internal/broker"
 	"github.com/nsantiagoblair/k8s-eda/internal/event"
 	"github.com/nsantiagoblair/k8s-eda/internal/service"
+	"github.com/nsantiagoblair/k8s-eda/internal/infra/memory"
 	"github.com/nsantiagoblair/k8s-eda/internal/store"
 	"github.com/nsantiagoblair/k8s-eda/internal/trade"
 )
 
-func newSvc(t *testing.T) (*service.TradeService, *broker.InMemoryPublisher) {
+func newSvc(t *testing.T) (*service.TradeService, *memory.Publisher) {
 	t.Helper()
-	s := store.NewInMemoryStore(func(tr *trade.Trade) string { return tr.ID })
-	pub := broker.NewInMemoryPublisher()
+	s := memory.NewStore(func(tr *trade.Trade) string { return tr.ID })
+	pub := memory.NewPublisher()
 	return service.NewTradeService(s, pub), pub
 }
 

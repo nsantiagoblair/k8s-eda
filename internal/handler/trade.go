@@ -7,10 +7,8 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 
-	"github.com/nsantiagoblair/k8s-eda/internal/store"
 	"github.com/nsantiagoblair/k8s-eda/internal/trade"
 )
 
@@ -89,34 +87,3 @@ func (h *TradeHandler) submit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, t)
 }
 
-// httpStatus maps domain errors to HTTP status codes.
-// All other errors map to 500.
-func httpStatus(err error) int {
-	var notFound *store.ErrNotFound
-	if errors.As(err, &notFound) {
-		return http.StatusNotFound
-	}
-
-	var invalidTransition *trade.ErrInvalidTransition
-	if errors.As(err, &invalidTransition) {
-		return http.StatusConflict
-	}
-
-	return http.StatusInternalServerError
-}
-
-// --- helpers ----------------------------------------------------------------
-
-type errorResponse struct {
-	Error string `json:"error"`
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, errorResponse{Error: msg})
-}

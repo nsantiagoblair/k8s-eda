@@ -41,7 +41,8 @@ User places a trade
 | [4 — Provider Stub](docs/chapter-04.md) | `04-provider-stub` | Synchronous HTTP integration with a stub provider; `cmd/` layout, HTTP client, `context.Context`, mocks |
 | [5 — Events](docs/chapter-05.md) | `05-events` | Kafka replaces synchronous HTTP; `TradeSubmitted` / `TradeFulfilled` events; goroutines, graceful shutdown, 202 Accepted |
 | [6 — Service Layer](docs/chapter-06.md) | `06-service-layer` | `internal/` layout; generic `Store[T]` + `HandlerFunc[T]`; application service layer; typed errors; consumer-defined interfaces |
-| 7 | `07-multi-entity` | `Order` and `Portfolio` entities; each uses `Store[T]` and a service; multiple Kafka topics wired together |
+| [7 — Multi-Entity](docs/chapter-07.md) | `07-multi-entity` | `infra/` layout; `Order` entity added with zero store boilerplate; multiple consumer groups on one topic |
+| 8 | `08-portfolio` | `Portfolio` entity tracking holdings; aggregate state from fulfilled trades |
 | 7 | `07-containerise` | Dockerfiles for each service; images built and run locally |
 | 8 | `08-kubernetes` | Deploy everything to a local Kubernetes cluster with plain manifests |
 | 9 | `09-resilience` | Retries, dead-letter queues, and graceful degradation when the provider is slow |
@@ -59,7 +60,8 @@ The project structure evolves deliberately across the chapters. Each change is i
 | 3 | `store/` gains `SQLiteStore` alongside `InMemoryStore` | Concrete repository pattern — swap implementation behind the interface |
 | 5 | `event/`, `broker/`, `consumer/` added | Event types separate from transport; Ports & Adapters for the broker; goroutines, graceful shutdown |
 | 6 | All packages move to `internal/`; `service/` added | `Store[T]` generic interface; `HandlerFunc[T]`; service layer; consumer-defined interfaces |
-| 7+ | `internal/order/`, `internal/portfolio/` | New entities use `Store[T]` and `HandlerFunc[T]` with no boilerplate |
+| 7 | `internal/infra/` separates adapters from ports; `internal/order/` added | `infra/sqlite`, `infra/kafka`, `infra/memory`; multiple consumer groups; second entity with no store boilerplate |
+| 8+ | `internal/portfolio/` | Aggregate state; Postgres replaces SQLite |
 | 8+ | Full Hexagonal-style layering | Inbound adapters (HTTP, events), outbound adapters (store, broker), domain ports |
 
 By the end the architecture will reflect [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) (Ports & Adapters): the domain knows nothing about HTTP or the broker; handlers and event consumers are thin adapters that translate external calls into domain operations. A service layer sits between them and handles orchestration.

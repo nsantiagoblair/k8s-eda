@@ -1,37 +1,39 @@
-package store
+// Package sqlite provides a SQLite-backed implementation of store.Store[*trade.Trade].
+// It lives under infra/ because it depends on an external system (the SQLite engine)
+// and would be swapped out for a Postgres implementation in production (Chapter 9).
+package sqlite
 
 import (
 	"database/sql"
 	"fmt"
 	"time"
 
+	"github.com/nsantiagoblair/k8s-eda/internal/store"
 	"github.com/nsantiagoblair/k8s-eda/internal/trade"
 
 	_ "modernc.org/sqlite"
 )
 
-// SQLiteStore is a persistent implementation of Store[*trade.Trade] backed by SQLite.
-// SQL schemas are entity-specific so this store is not generic — unlike InMemoryStore[T].
-// The trade-agnostic Store[T] interface is still satisfied, allowing the service layer
-// to swap between SQLiteStore and InMemoryStore[*trade.Trade] without changes.
-type SQLiteStore struct {
+// Store is a persistent trade store backed by SQLite.
+// The type name is just Store — the package name (sqlite) provides the context:
+// callers reference it as sqlite.Store, sqlite.NewStore.
+type Store struct {
 	db *sql.DB
 }
 
-func NewSQLiteStore(path string) (*SQLiteStore, error) {
+func NewStore(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-
-	s := &SQLiteStore{db: db}
+	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return s, nil
 }
 
-func (s *SQLiteStore) migrate() error {
+func (s *Store) migrate() error {
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS trades (
 			id          TEXT PRIMARY KEY,
@@ -47,11 +49,9 @@ func (s *SQLiteStore) migrate() error {
 	return err
 }
 
-func (s *SQLiteStore) Close() error {
-	return s.db.Close()
-}
+func (s *Store) Close() error { return s.db.Close() }
 
-func (s *SQLiteStore) Save(t *trade.Trade) error {
+func (s *Store) Save(t *trade.Trade) error {
 	_, err := s.db.Exec(`
 		INSERT INTO trades (id, asset, side, quantity, limit_price, status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -64,50 +64,28 @@ func (s *SQLiteStore) Save(t *trade.Trade) error {
 		t.CreatedAt.Format(time.RFC3339Nano),
 		t.UpdatedAt.Format(time.RFC3339Nano),
 	)
-	if err != nil {
-		return fmt.Errorf("save trade %s: %w", t.ID, err)
-	}
-	return nil
+	return err
 }
 
-func (s *SQLiteStore) FindByID(id string) (*trade.Trade, error) {
+func (s *Store) FindByID(id string) (*trade.Trade, error) {
 	row := s.db.QueryRow(`
 		SELECT id, asset, side, quantity, limit_price, status, created_at, updated_at
 		FROM trades WHERE id = ?
 	`, id)
-
 	t, err := scanTrade(row.Scan)
 	if err == sql.ErrNoRows {
-		return nil, &ErrNotFound{ID: id}
+		return nil, &store.ErrNotFound{ID: id}
 	}
-	if err != nil {
-		return nil, fmt.Errorf("find trade %s: %w", id, err)
-	}
-	return t, nil
+	return t, err
 }
 
-func (s *SQLiteStore) FindAll() ([]*trade.Trade, error) {
+func (s *Store) FindAll() ([]*trade.Trade, error) {
 	rows, err := s.db.Query(`
 		SELECT id, asset, side, quantity, limit_price, status, created_at, updated_at
 		FROM trades ORDER BY created_at ASC
 	`)
 	if err != nil {
-		return nil, fmt.Errorf("find all trades: %w", err)
-	}
-	defer rows.Close()
-	return collectRows(rows)
-}
-
-// FindByStatus returns all trades with the given status. This method is not
-// part of Store[T] — it is a trade-specific query available on the concrete
-// type when callers need SQL-level filtering.
-func (s *SQLiteStore) FindByStatus(status trade.Status) ([]*trade.Trade, error) {
-	rows, err := s.db.Query(`
-		SELECT id, asset, side, quantity, limit_price, status, created_at, updated_at
-		FROM trades WHERE status = ? ORDER BY created_at ASC
-	`, status.String())
-	if err != nil {
-		return nil, fmt.Errorf("find trades by status %s: %w", status, err)
+		return nil, err
 	}
 	defer rows.Close()
 	return collectRows(rows)
@@ -123,32 +101,23 @@ func scanTrade(scan scanFunc) (*trade.Trade, error) {
 		sideStr, statusStr      string
 		createdAtStr, updatedAt string
 	)
-
-	err := scan(
-		&t.ID, &t.Asset, &sideStr, &t.Quantity, &t.LimitPrice,
-		&statusStr, &createdAtStr, &updatedAt,
-	)
+	err := scan(&t.ID, &t.Asset, &sideStr, &t.Quantity, &t.LimitPrice,
+		&statusStr, &createdAtStr, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
-
-	t.Side, err = trade.ParseSide(sideStr)
-	if err != nil {
+	if t.Side, err = trade.ParseSide(sideStr); err != nil {
 		return nil, err
 	}
-	t.Status, err = trade.ParseStatus(statusStr)
-	if err != nil {
+	if t.Status, err = trade.ParseStatus(statusStr); err != nil {
 		return nil, err
 	}
-	t.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAtStr)
-	if err != nil {
-		return nil, fmt.Errorf("parse created_at: %w", err)
+	if t.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAtStr); err != nil {
+		return nil, err
 	}
-	t.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("parse updated_at: %w", err)
+	if t.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt); err != nil {
+		return nil, err
 	}
-
 	return &t, nil
 }
 
